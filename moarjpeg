@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+# Required tools:
+# imagemagick
+
+self=$(basename $0)
+
+function printHelpAndExit {
+cat <<EOF
+Usage:
+  ${self} [options] filename
+Version:   0.0.1
+
+Adds moar jpeg.
+
+Options: (all optional)
+  i ITERATIONS:   The number of iterations to perform (default 2)
+  q QUALITY:      The quality to use when compressing (defualt 8)
+  s SIZE:         Downsizes the image; incrementally scaling the image up to the
+                  original size, adding additonal artifacts with each iteration
+                  (defualt 80)
+  o OUTPUT:       Output file
+
+Example:
+  ${self} -i 5 -o moar.jpeg
+
+EOF
+exit $1
+}
+
+# Initialize variables
+
+# Making the JPG smaller, then scaling it back up will produce more visual
+# artifacts, but be careful that at least *some* detail is preserved
+smaller=80
+
+# Iterations will incrementally scale up the image,
+# producing more artifacts at each size
+iterations=2
+
+# Quality
+# Setting the quality too low may product too much jpeg
+quality=8
+
+# Get Options
+while getopts ":i:q:s:o:h" OPTION; do
+  case $OPTION in
+    h)
+      printHelpAndExit 0
+      ;;
+    i)
+      iterations="$OPTARG"
+      ;;
+    o)
+      output="$OPTARG"
+      ;;
+    q)
+      quality="$OPTARG"
+      ;;
+    s)
+      smaller="$OPTARG"
+      ;;
+    *)
+      printHelpAndExit 1
+      ;;
+  esac
+done
+
+shift $(( OPTIND - 1 ))
+
+# Input file
+input="$1"
+[ -z "$input" ] && printHelpAndExit 1
+[ ! -e "$input" ] && exit
+
+# Output file
+if [ -z "$output" ]; then
+  # Make temporary file
+  # mktmp
+  output="${1%%.*}.moar.jpg"
+fi
+
+# Incremental Scale = 100*((100/smaller)^(1/iterations))
+iscale=$(echo "scale=5; 100 * ( e((1/${iterations})*l(100/$smaller)) )" | bc -l)
+
+# Craft command
+cmd="convert '$1' -scale ${smaller}% jpg:-"
+for run in $(seq 1 $iterations); do
+  cmd+="| mogrify -flatten -quality ${quality} -scale ${iscale}% jpg:-"
+done
+cmd+="> '$output'"
+
+# Execute command
+bash -c "$cmd"
